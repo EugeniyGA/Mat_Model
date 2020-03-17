@@ -279,7 +279,7 @@ for (p in seq(0, 1, length = 501)){
     SPC <- tbl1[1, 1] / sum(tbl1[1, ])
     x1 <- c(x1, 1 - SPC)}
 # LDA
-# Прогноз: вероятности принадлежности классу Type = 2
+# Прогноз: вероятности принадлежности классу Type = 1
 p.lda <- predict(model.lda, dfp, 
                  type = 'response')
 x2 <- NULL    # для (1 - SPC)
