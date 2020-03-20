@@ -1,0 +1,193 @@
+---
+title: "Упражнение №4"
+author: "Галиченко Евгений"
+date: "20 03 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+На наборе данных из своего варианта построить модели линейной регрессии с указанными Y и X. Рассмотреть модели с категориальными предикторами, включая их взаимодействие с непрерывными объясняющими переменными. Сгенерировать отчёт по структуре отчёта из практики. Включить в отчёт выводы по каждому из разделов (описание данных, модели, сравнение с kNN). Ответить на вопрос, пригодна ли построенная модель регрессии для прогнозирования и почему.
+Код отчёта в файле .Rmd разместить на github.com, отчёт в формате html – на rpubs.com. Ссылки на репозиторий и отчёт на rpubs выслать на почту.
+
+# Вариант 4
+
+- Данные: Auto{ISLR};
+
+- Зависимая переменная: mpg;
+
+- Объясняющие переменные:
+
+1. Непрерывные: weight, acceleration, year;
+
+2. Дискретные (факторы): cylinders.
+
+```{r Данные и пакеты, warning = F, message = F}
+# Загрузка пакетов
+library('GGally')       # Графики совместного разброса переменных
+library('lmtest')       # Тесты остатков регрессионных моделей
+library('FNN')          # Алгоритм kNN
+library('ISLR')         # Данные Auto
+
+# Загрузка данных Auto
+data('Auto')
+# Отбор необходимых данных для построения моделей
+Auto <- Auto[,c('mpg', 'weight', 'acceleration', 'year', 'cylinders'), drop=FALSE]
+
+# константы
+my.seed <- 12345
+train.percent <- 0.85
+
+Auto$cylinders <- as.factor(Auto$cylinders)
+
+# обучающая выборка
+set.seed(my.seed)
+inTrain <- sample(seq_along(Auto$mpg), 
+                  nrow(Auto) * train.percent)
+df.train <- Auto[inTrain, c(colnames(Auto)[-1], colnames(Auto)[1])]
+df.test <- Auto[-inTrain,-1]
+```
+
+## Описание переменных  
+
+Набор данных `Auto` содержит переменные:  
+
+- `mpg` - миль на галлон;
+- `weight` – вес автомобиля (кг.);  
+- `acceleration` – время ускорения от 0 до 60 миль в час (сек.);
+- `year` – модельный год (по модулю 100)
+- `cylinders` - количество цилиндров от 4 до 8
+
+Размерность обучающей выборки: $n = `r dim(df.train)[1]`$ строк, $p = `r dim(df.train)[2] - 1`$ объясняющих переменных. Зависимая переменная -- `mpg`.
+
+```{r Описание данных, echo = F, message = F, warning = F}
+
+# описательные статистики по переменным
+summary(df.train)
+
+# совместный график разброса переменных
+ggpairs(df.train)
+
+# цвета по фактору cylinders
+ggpairs(df.train[, c('mpg', 'weight', 'acceleration', 'year', 'cylinders')], 
+        mapping = ggplot2::aes(color = cylinders))
+```
+
+Судя по коробчатой диаграмме на пересечении `mpg` и `cylinders`, средний число миль на галлон отличается в зависимости от кол-ва цилиндров в автомобиле: чем меньше кол-во цилиндров тем больше миль на галлон. Нижний правый график показывает, что доли наблюдений с различными значениями признака `cylinders` в наборе данных имеют следующий вид: наибольшую часть наблюдений отражает коэффициент со значением 4, 6 и 8 на равне, остальные практически отсутствуют.
+
+## Модели  
+
+```{r echo = F, warning = F, error = F}
+model.1 <- lm(mpg ~ . + weight:cylinders + acceleration:cylinders + year:cylinders,
+              data = df.train)
+summary(model.1)
+```
+
+Совместное влияние `year:cylinders` исключаем, т.к. параметры незначимы (наименее занчимы по сравнению с другими незначимыми коэффициентами).
+
+```{r echo = F, warning = F, error = F}
+model.2 <- lm(mpg ~ . + weight:cylinders + acceleration:cylinders,
+              data = df.train)
+summary(model.2)
+```
+
+Совместное влияние `acceleration:cylinders` исключаем, т.к. параметры незначимы (наименее занчимы по сравнению с другими незначимыми коэффициентами).
+
+```{r echo = F, warning = F, error = F}
+model.3 <- lm(mpg ~ . + weight:cylinders,
+              data = df.train)
+summary(model.3)
+```
+
+Взаимодействие `weigth:cylinders` так же удаляем
+
+```{r echo = F, warning = F, error = F}
+model.4 <- lm(mpg ~ weight + acceleration + year + cylinders,
+              data = df.train)
+summary(model.4)
+```
+
+Параметр `acceleration` является незначимым, поэтому его тоже исключим из уравнения регресии.
+
+```{r echo = F, warning = F, error = F}
+model.5 <- lm(mpg ~ weight + year + cylinders,
+              data = df.train)
+summary(model.5)
+```
+
+В данной модели все коэффициенты оказались значимыми,  ($R^2=0.838$). Cтоит остановиться на модели без взаимодействий. Проверим её остатки.
+
+# Проверка остатков  
+
+```{r , warning = F, error = F}
+
+# тест Бройша-Пагана
+bptest(model.5)
+
+# статистика Дарбина-Уотсона
+dwtest(model.5)
+
+# графики остатков
+par(mar = c(4.5, 4.5, 2, 1))
+par(mfrow = c(1, 3))
+plot(model.5, 1)
+plot(model.5, 4)
+plot(model.5, 5)
+par(mfrow = c(1, 1))
+```
+
+Судя по графику слева, остатки случайны, и их дисперсия постоянна. В модели есть три влиятельных наблюдения: 112, 275, 328. Графики остатков не заставляют усомниться в том, что остатки удовлетворяют условиям Гаусса-Маркова.
+
+# Сравнение с kNN
+
+```{r }
+
+# фактические значения y на тестовой выборке
+y.fact <- Auto[-inTrain, 1]
+y.model.lm <- predict(model.5, df.test)
+MSE.lm <- sum((y.model.lm - y.fact)^2) / length(y.model.lm)
+
+df.train1 <- df.train
+df.test1 <- df.test
+df.train1$cylinders <- as.numeric(df.train1$cylinders)
+df.test1$cylinders <- as.numeric(df.test1$cylinders)
+
+# kNN требует на вход только числовые переменные
+df.train.num <- as.data.frame(apply(df.train1, 2, as.numeric))
+df.test.num <- as.data.frame(apply(df.test1, 2, as.numeric))
+
+for (i in 2:50){
+    model.knn <- knn.reg(train = df.train.num[, !(colnames(df.train.num) %in% 'mpg')], 
+                     y = df.train.num[, 'mpg'], 
+                     test = df.test.num, k = i)
+    y.model.knn <- model.knn$pred
+    if (i == 2){
+        MSE.knn <- sum((y.model.knn - y.fact)^2) / length(y.model.knn)
+    } else {
+        MSE.knn <- c(MSE.knn, 
+                     sum((y.model.knn - y.fact)^2) / length(y.model.knn))
+    }
+}
+
+# график
+par(mar = c(4.5, 4.5, 1, 1))
+# ошибки kNN
+# ошибка регрессии
+plot(2:50, MSE.knn, ylim = c(10,50), type = 'b', col = 'darkgreen',
+     xlab = 'значение k', ylab = 'MSE на тестовой выборке')
+lines(2:50, rep(MSE.lm, 49), lwd = 2, col = grey(0.2), lty = 2)
+legend('bottomright', lty = c(1, 2), pch = c(1, NA), 
+       col = c('darkgreen', grey(0.2)), 
+       legend = c('k ближайших соседа', 'регрессия (все факторы)'), 
+       lwd = rep(2, 2))
+```
+
+```{r, include = F}
+frml.to.text.01 <- paste0('$\\frac {\\sqrt{MSE_{TEST}}}{\\bar{y}_{TEST}} = ',
+                          round(sqrt(MSE.lm) / mean(y.fact) * 100, 1),
+                          '\\%$')
+```
+
+Как можно видеть по графику, ошибка регрессии на тестовой выборке меньше, чем ошибка метода k ближайших соседей с k от 2 до 50. Ошибка регрессионной модели на тестовой выборке не очень велика и составляет `r frml.to.text.01` от среднего значения зависимой переменной. У лучшей модели kNN точность ещё хуже: она ошибается на `r paste0(round(sqrt(min(MSE.knn)) / mean(y.fact) * 100, 1), '%')` от среднего значения объясняющей переменной.
