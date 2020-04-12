@@ -1,0 +1,251 @@
+---
+title: "Упражнение №6"
+author: "Галиченко Евгений"
+date: "07 04 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Задачи:
+
+1. Примените указанный в варианте метод к набору данных по своему варианту (см. таблицу ниже). Не забудьте предварительно сделать из категориальных переменных факторы. Выберите оптимальную модель с помощью кросс-валидации. Выведите её коэффициенты с помощью функции coef(). Рассчитайте MSE модели на тестовой выборке.   
+
+2. Примените указанный в варианте метод к набору данных по своему варианту (см. таблицу ниже). Для модели:   
+
+ - Подогнать модель на всей выборке и вычислить ошибку (MSE) с кросс-валидацией. По наименьшей MSE подобрать оптимальное значение настроечного параметра метода (гиперпараметр λ или число главных компонент M).
+
+ - Подогнать модель с оптимальным значением параметра на обучающей выборке, посчитать MSE на тестовой.   
+ 
+ - Подогнать модель с оптимальным значением параметра на всех данных, вывести характеристики модели функцией summary().    
+
+3. Сравните оптимальные модели, полученные в заданиях 1 и 2 по MSE на тестовой выборке. Какой метод дал лучший результат? Доля тестовой выборки: 50%.   
+
+Как сдавать: прислать на почту преподавателя ссылки:    
+
+* на html-отчёт с видимыми блоками кода (блоки кода с параметром echo = T), размещённый на [rpubs.com](rpubs.com).    
+* на код, генерирующий отчёт, в репозитории на [github.com](github.com).  
+
+## Вариант 4
+
+Данные `Auto {ISLR}`:
+
+- `mpg` - миль на галлон (зависимая переменная);
+- `cylinders` - количество цилиндров от 4 до 8;
+- `displacement` - объем двигателя (куб. Дюймов);
+- `horsepower` - мощность двигателя;
+- `weight` - вес автомобиля (кг.);
+- `acceleration` - время ускорения от 0 до 60 миль в час (сек.);
+- `year` - модельный год (по модулю 100);
+- `origin` - происхождение автомобиля (1. Американское, 2. Европейское, 3. Японское).
+
+Методы:
+
+- Для задания 1: отбор оптимального подмножества;
+- Для задания 2: регрессия на главные компоненты.
+
+```{r Данные и пакеты, warning = F, message = F}
+# Загрузка пакетов
+library('knitr')             # Пакет для генерации отчёта
+library('ISLR')              # Набор данных Auto
+library('leaps')             # Функция regsubset() - отбор оптимального подмножества переменных
+library('pls')               # Регрессия на главные компоненты - pcr()
+
+my.seed <- 1
+
+# Загрузка данных Auto
+data('Auto')
+# Переводим дискретные количественные переменные в факторы
+Auto$origin <- as.factor(Auto$origin)
+Auto <- Auto[, -9]
+```
+
+набор данных по расходу бензина, лошадиных сил и другой информации для 392 автомобилей.
+
+```{r}
+# Название столбцов переменных
+names(Auto)
+
+# Размерность данных
+dim(Auto)
+```
+
+Считаем число пропусков в данных и убираем их.   
+
+```{r}
+# Считаем пропуски
+sum(is.na(Auto))
+
+# Убираем пропуски
+Auto <- na.omit(Auto)
+
+# Проверяем результат
+dim(Auto)
+sum(is.na(Auto))
+```
+
+## Отбор оптимального подмножества
+
+```{r}
+# Подгоняем модели с сочетаниями предикторов до 8 (максимум в данных)
+regfit.full <- regsubsets(mpg ~ ., Auto)
+reg.summary <- summary(regfit.full)
+reg.summary
+
+# Структура отчёта по модели (ищем характеристики качества)
+names(reg.summary)
+
+# R^2 и скорректированный R^2
+round(reg.summary$rsq, 3)
+
+# На графике
+plot(1:8, reg.summary$rsq, type = 'b',
+     xlab = 'Количество предикторов', ylab = 'R-квадрат')
+# Сюда же добавим скорректированный R-квадрат
+points(1:8, reg.summary$adjr2, col = 'red')
+
+# Модель с максимальным скорректированным R-квадратом
+which.max(reg.summary$adjr2)
+### 7
+points(which.max(reg.summary$adjr2), 
+       reg.summary$adjr2[which.max(reg.summary$adjr2)],
+       col = 'red', cex = 2, pch = 20)
+legend('bottomright', legend = c('R^2', 'R^2_adg'),
+      col = c('black', 'red'), lty = c(1, NA),
+      pch = c(1, 1))
+
+# C_p
+reg.summary$cp
+# число предикторов у оптимального значения критерия
+which.min(reg.summary$cp)
+### 7
+
+# График
+plot(reg.summary$cp, xlab = 'Число предикторов',
+     ylab = 'C_p', type = 'b')
+points(which.min(reg.summary$cp),
+       reg.summary$cp[which.min(reg.summary$cp)], 
+       col = 'red', cex = 2, pch = 20)
+
+# BIC
+reg.summary$bic
+# Число предикторов у оптимального значения критерия
+which.min(reg.summary$bic)
+### 4
+
+# График
+plot(reg.summary$bic, xlab = 'Число предикторов',
+     ylab = 'BIC', type = 'b')
+points(which.min(reg.summary$bic),
+       reg.summary$bic[which.min(reg.summary$bic)], 
+       col = 'red', cex = 2, pch = 20)
+
+# метод plot для визуализации результатов
+plot(regfit.full, scale = 'r2')
+plot(regfit.full, scale = 'adjr2')
+plot(regfit.full, scale = 'Cp')
+plot(regfit.full, scale = 'bic')
+
+# коэффициенты модели с наименьшим BIC
+round(coef(regfit.full, 4), 3)
+```
+
+## Нахождение оптимальной модели  при помощи метода перекрёстной проверки 
+
+### k-кратная кросс-валидация  
+
+```{r}
+# Отбираем 10 блоков наблюдений
+k <- 10
+set.seed(my.seed)
+folds <- sample(1:k, nrow(Auto), replace = T)
+
+# Заготовка под матрицу с ошибками
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+predict.regsubsets = function(object, newdata, id, ...) {
+    form = as.formula(object$call[[2]])
+    mat = model.matrix(form, newdata)
+    coefi = coef(object, id = id)
+    mat[, names(coefi)] %*% coefi}
+
+# Заполняем матрицу в цикле по блокам данных
+for (j in 1:k){
+    best.fit <- regsubsets(mpg ~ ., data = Auto[folds != j, ],
+                           nvmax = 8)
+    # Теперь цикл по количеству объясняющих переменных
+    for (i in 1:8){
+        # Модельные значения mpg
+        pred <- predict(best.fit, Auto[folds == j, ], id = i)
+        # Вписываем ошибку в матрицу
+        cv.errors[j, i] <- mean((Auto$mpg[folds == j] - pred)^2)
+    }
+}
+
+# Усредняем матрицу по каждому столбцу (т.е. по блокам наблюдений), 
+# Чтобы получить оценку MSE для каждой модели с фиксированным 
+# Количеством объясняющих переменных
+mean.cv.errors <- apply(cv.errors, 2, mean)
+round(mean.cv.errors, 0)
+
+# На графике
+plot(mean.cv.errors, type = 'b')
+points(which.min(mean.cv.errors), mean.cv.errors[which.min(mean.cv.errors)],
+       col = 'red', pch = 20, cex = 2)
+
+# Перестраиваем модель с 8 объясняющими переменными на всём наборе данных
+reg.best <- regsubsets(mpg ~ ., data = Auto, nvmax = 8)
+round(coef(reg.best, 8), 3)
+```
+
+## Регрессия на главные компоненты
+
+```{r}
+# Кросс-валидация
+set.seed(2)
+pcr.fit <- pcr(mpg ~ ., data = Auto, scale = T, validation = 'CV')
+summary(pcr.fit)
+
+# График ошибок
+validationplot(pcr.fit, val.type = 'MSEP')
+```
+
+## Подбор оптимального М: кросс-валидация на обучающей выборке
+
+```{r}
+set.seed(my.seed)
+x <- model.matrix(mpg ~ ., Auto)[, -1]
+train <- sample(1:nrow(x), nrow(x)/2)
+test <- -train
+y <- Auto$mpg
+y.test <- y[test]
+pcr.fit <- pcr(mpg ~ ., data = Auto, subset = train, scale = T, validation = 'CV')
+validationplot(pcr.fit, val.type = 'MSEP')
+
+# MSE на тестовой выборке
+pcr.pred <- predict(pcr.fit, x[test, ], ncomp = 8)
+round(mean((pcr.pred - y.test)^2), 0)
+
+# Подгоняем модель на всей выборке для М = 8
+# (Оптимально по методу перекрёстной проверки)
+pcr.fit <- pcr(y ~ x, scale = T, ncomp = 8)
+summary(pcr.fit)
+```
+
+```{r}
+# MSE на тестовой выборке с 8 объясняющими переменными (отбор оптимального подмножества)
+opt.test <- predict(best.fit, Auto[test, ], id = 4)
+opt.mse.test <- round(mean((opt.test - y.test)^2), 0)
+
+# MSE на тестовой выборке (гребневая регрессия)
+regres.test <- predict(pcr.fit, x[test, ], ncomp = 8)
+regres.mse.test <- round(mean((pcr.pred - y.test)^2), 0)
+
+MSE.test <- rbind(opt.mse.test, regres.mse.test)
+row.names(MSE.test) <- c('MSE (отбор оптимального подмножества)', 'MSE (гребневая регрессия)')
+kable(MSE.test)
+```
+
+Сравнивая результаты расчётов MSE на тестовой выборке для двух оптимальных моделей, полученных в заданиях 1 и 2, можно заключить, что стандартная ошибка MSE модели №1 (отбор оптимального подмножества) и модели №2 (регрессия на главные компоненты) оказалась оказались одинаковыми.
