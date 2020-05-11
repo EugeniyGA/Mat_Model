@@ -1,0 +1,255 @@
+---
+title: "Упражнение №7"
+author: "Галиченко Евгений"
+date: "16 04 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Необходимо построить две модели:  
+
+- зависимости непрерывного отклика от одного непрерывного предиктора;
+- зависимости вероятности (логит) от одного непрерывного предиктора.   
+
+Для каждой модели:   
+
+1. Указать смысл переменных модели, метод оценки и настроечный параметр (степень полинома, гиперпараметр $λ$, ширина окна $s$, число узлов – в зависимости от метода).   
+
+2. Подогнать модель на всех наблюдениях, меняя значение настроечного параметра.   
+
+3. Обосновать оптимальное значение настроечного параметра подходящим методом (кросс-валидация, ANOVA).   
+
+4. Сделать прогноз на обучающую выборку по лучшей модели: модельные значения и ошибки прогноза.   
+
+5. Построить график с фактическими наблюдениями, модельной кривой и 95% доверительными интервалами прогноза.   
+
+В таблице ниже указаны набор данных, столбцы с переменными для модели и метод подгонки.    
+
+Как сдавать: прислать на почту преподавателя ссылки:
+
+* на html-отчёт с видимыми блоками кода (блоки кода с параметром echo = T), размещённый на [rpubs.com](rpubs.com).
+* на код, генерирующий отчёт, в репозитории на [github.com](github.com).
+В текст отчёта включить постановку задачи и ответы на вопросы задания.  
+
+## Вариант 4
+
+Модели: ступенчатая функция.   
+Данные: `Boston {MASS}'.  
+
+```{r setup1, warning = F, message = F}
+library('MASS')              # набор данных Boston
+library('splines')           # сплайны
+library('gam')               # обобщённые аддитивные модели
+library('akima')             # график двумерной плоскости
+library('ggplot2')           # красивые графики
+
+# загрузка данных Boston
+data('Boston')
+
+# ядро
+my.seed <- 1
+```
+
+Работаем с набором данных по стоимости жилья в пригороде Бостона. Присоединяем его к пространству имён функцией `attach()`, и дальше обращаемся напрямую к столбцам таблицы.    
+
+```{r}
+attach(Boston)
+```
+
+Работаем со столбцами:    
+* `indus` -- доля нерозничных торговых площадей на город;   
+* `dis` -- средневзвешенное расстояние до пяти бостонских центров занятости.   
+
+## Ступенчатые функции
+
+Судя по графику ниже, взаимосвязь доли торговых площадей и средневзвешенного расстояния до центров занятости нелинейна. Наблюдается также группа наблюдений с высоким значением `indus`, граница проходит примерно на уровне 18.
+
+```{r, fig.height = 5, fig.width = 5}
+gp <- ggplot(data = Boston, aes(x = dis, y = indus))
+gp <- gp + geom_point() + geom_abline(slope = 0, intercept = 16.5, col = 'red')
+gp
+```
+
+Для начала определим несколько интервалов, на каждом из которых будем меделировать зависимость indus от dis своим средним уровнем.
+
+### Зависимость доли торговых площадей от средневзвешенного расстояния до центров занятости (модель 1)
+
+```{r, fig.height = 5, fig.width = 5}
+# Границы изменения переменной dis
+dislims <- range(dis)
+
+# значения age, для которых делаем прогноз (от min до max с шагом 1)
+dis.grid <- seq(from = dislims[1], to = dislims[2]+1)
+
+# подгоняем линейную модель на интервалах
+fit <- lm(indus ~ cut(dis, 4), data = Boston)
+round(coef(summary(fit)), 2)
+
+# прогноз -- это средние по `wage` на каждом интервале
+preds.cut <- predict(fit, newdata  = list(dis = dis.grid), se = T)
+
+# Интервальный прогноз
+se.bands.cut <- cbind(lower.bound = preds.cut$fit - 2*preds.cut$se.fit,
+                      upper.bound = preds.cut$fit + 2*preds.cut$se.fit)
+
+# наблюдения
+plot(dis, indus, xlim = dislims, cex = 0.5, col = 'darkgrey')
+
+# модель
+lines(dis.grid, preds.cut$fit, lwd = 2, col = 'darkgreen')
+
+# доверительные интервалы прогноза
+matlines(x = dis.grid, y = se.bands.cut, lwd = 1, col = 'darkgreen', lty = 3)
+
+# заголовок
+title('Ступенчатая функция')
+```
+
+### Определение оптимального настроечного параметра (модель 1)
+
+Теперь подбираем количество интервалов, сравнивая модели с интервалами от 1 до 8 с помощью дисперсионного анализа (ANOVA).
+
+```{r}
+fit.1 <- lm(indus ~ dis, data = Boston)
+fit.2 <- lm(indus ~ cut(dis, 2), data = Boston)
+fit.3 <- lm(indus ~ cut(dis, 3), data = Boston)
+fit.4 <- lm(indus ~ cut(dis, 4), data = Boston)
+fit.5 <- lm(indus ~ cut(dis, 5), data = Boston)
+fit.6 <- lm(indus ~ cut(dis, 6), data = Boston)
+fit.7 <- lm(indus ~ cut(dis, 7), data = Boston)
+fit.8 <- lm(indus ~ cut(dis, 8), data = Boston)
+
+# Дисперсионный анализ
+round(anova(fit.1, fit.2, fit.3, fit.4, fit.5, fit.6, fit.7, fit.8), 2)
+
+# Лучшая модель с количество интервалов = 7
+best.fit.1 <- fit.6
+```
+
+Рассматривая 8 моделей, в которых количество разбиений dis идет по возрастанию. В крайнем правом столбце таблицы приводятся p-значения для проверки нулевой гипотезы: текущая модель не даёт статистически значимого сокращения RSS по сравнению с предыдущей моделью. Можно сделать вывод, что количество интервалов равное 6 достаточно, дальнейшее увеличение интервалов не даёт значимого улучшения.
+
+### Прогноз на обучающую выборку по лучшей модели (модель 1)
+
+```{r}
+# Прогноз по лучшей модели
+preds <- predict(best.fit.1, data.frame(dis = dis.grid), se = T)
+
+# Границы доверительного интервала для площади нерозничных торговых площадей
+se.bands <- cbind(lower.bound = preds$fit - 2*preds$se.fit,
+                  upper.bound = preds$fit + 2*preds$se.fit)
+
+# Смотрим результат
+round(head(se.bands), 2)
+
+# Стандартные ошибки
+round(preds$se.fit, 2)
+```
+
+### График с фактическими наблюдениями, модельной кривой и 95% доверительными интервалами прогноза (модель 1)
+
+```{r}
+# Сетка для графика
+plot(dis, indus, xlim = dislims, type = 'n',
+     ylab = 'P(Indus | Dis)')
+
+# Фактические наблюдения показываем засечки
+points(jitter(dis), indus, cex = 0.5, pch = '|', col = 'darkgrey')
+
+pfit <- preds$fit
+# Модель
+lines(dis.grid, pfit, lwd = 2, col = 'darkgreen')
+
+# Доверительные интервалы
+matlines(dis.grid, se.bands, lwd = 1, col = 'darkgreen', lty = 3)
+
+# Заголовок
+title('Ступенчатая функция (модель 1)')
+```
+
+### Зависимость вероятности доли торговых площадей > 16.5 от средневзвешенного расстояния до центров занятости (модель 2)
+
+```{r, fig.height = 5, fig.width = 5}
+# подгоняем линейную модель на интервалах
+fit2 <- lm(I(indus > 16.5) ~ cut(dis, 4), data = Boston)
+
+# прогноз -- это средние по `wage` на каждом интервале
+preds.cut <- predict(fit2, newdata  = list(dis = dis.grid), se = T)
+
+# Интервальный прогноз
+se.bands.cut <- cbind(lower.bound = preds.cut$fit - 2*preds.cut$se.fit,
+                      upper.bound = preds.cut$fit + 2*preds.cut$se.fit)
+
+# наблюдения
+plot(dis, I(indus>16.5), xlim = dislims, cex = 0.5, col = 'darkgrey')
+
+# модель
+lines(dis.grid, preds.cut$fit, lwd = 2, col = 'darkgreen')
+
+# доверительные интервалы прогноза
+matlines(x = dis.grid, y = se.bands.cut, lwd = 1, col = 'darkgreen', lty = 3)
+
+# заголовок
+title('Ступенчатая функция')
+```
+
+### Определение оптимального настроечного параметра (модель 2)
+
+```{r}
+fit.1 <- lm(I(indus > 16.5) ~ dis, data = Boston)
+fit.2 <- lm(I(indus > 16.5) ~ cut(dis, 2), data = Boston)
+fit.3 <- lm(I(indus > 16.5) ~ cut(dis, 3), data = Boston)
+fit.4 <- lm(I(indus > 16.5) ~ cut(dis, 4), data = Boston)
+fit.5 <- lm(I(indus > 16.5) ~ cut(dis, 5), data = Boston)
+fit.6 <- lm(I(indus > 16.5) ~ cut(dis, 6), data = Boston)
+fit.7 <- lm(I(indus > 16.5) ~ cut(dis, 7), data = Boston)
+fit.8 <- lm(I(indus > 16.5) ~ cut(dis, 8), data = Boston)
+fit.9 <- lm(I(indus > 16.5) ~ cut(dis, 9), data = Boston)
+
+# Дисперсионный анализ
+round(anova(fit.1, fit.2, fit.3, fit.4, fit.5, fit.6, fit.7, fit.8, fit.9), 2)
+
+# Лучшая модель с количество интервалов = 7
+best.fit.2 <- fit.8
+```
+
+### Прогноз на обучающую выборку по лучшей модели (модель 2)
+
+```{r}
+# Прогнозы
+preds <- predict(best.fit.2, newdata = list(dis = dis.grid), se = T)
+
+# Пересчитываем доверительные интервалы и прогнозы в исходном ЕИ
+pfit <- exp(preds$fit) / (1 + exp(preds$fit))
+se.bands.logit <- cbind(lower.bound = preds$fit - 2*preds$se.fit,
+                        upper.bound = preds$fit + 2*preds$se.fit)
+se.bands <- exp(se.bands.logit)/(1 + exp(se.bands.logit))
+
+# Результат - доверительный интервал для вероятности события
+round(head(se.bands), 3)
+
+# Стандартные ошибки
+round(preds$se.fit, 2)
+```
+
+### График с фактическими наблюдениями, модельной кривой и 95% доверительными интервалами прогноза (модель 2)
+
+```{r}
+# Сетка для графика
+plot(dis, I(indus > 16.5), xlim = dislims, type = 'n', ylim = c(0, 0.7),
+     ylab = 'P(Indus > 16.5 | Dis)')
+
+# Фактические наблюдения показываем засечки
+points(jitter(dis), I((indus > 16.5) / 5), cex = 0.5, pch = '|', col = 'darkgrey')
+
+# Модель
+lines(dis.grid, pfit, lwd = 2, col = 'darkgreen')
+
+# Доверительные интервалы
+matlines(dis.grid, se.bands, lwd = 1, col = 'darkgreen', lty = 3)
+
+# Заголовок
+title('Ступенчатая функция')
+```
